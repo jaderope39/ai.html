@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>轨道交通全日制行车计划动态编制系统</title>
+    <style>
+        :root {
+            /* 全局等比缩放基准 */
+            font-size: clamp(10px, 1.2vw, 16px); 
+
+            /* 主题色板 */
+            --bg-body: #f4f6f8; --bg-table-odd: #ffffff; --bg-table-even: #f8f9fa; 
+            --bg-header: #343a40; --bg-sub-header: #495057; 
+            --bg-input: rgba(13, 110, 253, 0.08); --bg-input-focus: #ffffff; 
+            --bg-result: rgba(108, 117, 125, 0.05); --bg-diagonal: rgba(108, 117, 125, 0.12); 
+            --bg-title-header: #0d6efd; --bg-button: #6c757d; --bg-button-hover: #5a6268; 
+            --bg-chart: #ffffff; --bg-bar-track: #e9ecef; --bg-bar-value: #0d6efd; 
+            --bg-bar-peak: #fd7e14; 
+            --bg-slider-thumb: #ffffff; --border-slider-thumb: #0d6efd; --border-slider-peak: #fd7e14;
+            --bg-btn-reset: #dc3545; --bg-btn-reset-hover: #c82333; --bg-btn-random: #198754; --bg-btn-random-hover: #157347;
+            --text-body: #212529; --text-header: #212529; --text-header-inv: white; 
+            --text-result: #212529; --text-unit: #6c757d; --text-tip: #868e96; 
+            --border-color: #dee2e6; --outline-focus: #0d6efd;
+            --shadow-base: 0 0.25rem 0.75rem rgba(0,0,0,0.08); --shadow-focus: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+            --shadow-thumb: 0 0.2rem 0.4rem rgba(0,0,0,0.25);
+        }
+        
+        html.dark-mode {
+            --bg-body: #121416; --bg-table-odd: #1e2124; --bg-table-even: #25282c; 
+            --bg-header: #2c3035; --bg-sub-header: #3a3f45; 
+            --bg-input: rgba(88, 166, 255, 0.12); --bg-input-focus: #1e2124; 
+            --bg-result: rgba(255, 255, 255, 0.03); --bg-diagonal: rgba(255, 255, 255, 0.08); 
+            --bg-title-header: #0056b3; --bg-button: #484e54; --bg-button-hover: #5a6268; 
+            --bg-chart: #1e2124; --bg-bar-track: #2c3035; --bg-bar-value: #58a6ff; 
+            --bg-bar-peak: #f09852; 
+            --bg-slider-thumb: #343a40; --border-slider-thumb: #58a6ff; --border-slider-peak: #f09852;
+            --bg-btn-reset: #da3633; --bg-btn-reset-hover: #b92521; --bg-btn-random: #28a745; --bg-btn-random-hover: #218838;
+            --text-body: #e9ecef; --text-header: #f8f9fa; --text-header-inv: #e9ecef; 
+            --text-result: #f8f9fa; --text-unit: #adb5bd; --text-tip: #868e96;
+            --border-color: #343a40; --outline-focus: #58a6ff;
+            --shadow-base: 0 0.25rem 0.75rem rgba(0,0,0,0.3); --shadow-focus: 0 0 0 0.2rem rgba(88, 166, 255, 0.4);
+            --shadow-thumb: 0 0.2rem 0.5rem rgba(0,0,0,0.5);
+        }
+
+        body { font-family: "Microsoft YaHei", "Segoe UI", Tahoma, sans-serif; margin: 0; padding: 1.25rem; background-color: var(--bg-body); color: var(--text-body); transition: background-color 0.3s ease, color 0.3s ease; font-size: 1rem; }
+        .main-container { max-width: 78rem; margin: 0 auto; }
+        
+        h1 { font-size: 1.6rem; font-weight: bold; }
+        h2 { font-size: 1.15rem; font-weight: bold; color: var(--text-header); display: flex; justify-content: space-between; align-items: center; margin-top: 2.5rem; margin-bottom: 1rem; }
+        
+        /* 核心防挤压容器：原生横向滑动 */
+        .table-wrapper { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; box-shadow: var(--shadow-base); border-radius: 0.5rem; background-color: var(--bg-table-odd); margin-bottom: 1.5rem; }
+        /* 自定义滚动条样式 */
+        .table-wrapper::-webkit-scrollbar, #ratioChartContainer::-webkit-scrollbar { height: 0.5rem; }
+        .table-wrapper::-webkit-scrollbar-thumb, #ratioChartContainer::-webkit-scrollbar-thumb { background-color: var(--bg-sub-header); border-radius: 0.25rem; }
+        .table-wrapper::-webkit-scrollbar-track, #ratioChartContainer::-webkit-scrollbar-track { background-color: transparent; }
+
+        table { width: 100%; min-width: 62.5rem; table-layout: fixed; border-collapse: collapse; font-size: 1rem; }
+        th, td { border: 1px solid var(--border-color); padding: 0.25rem 0.4rem; text-align: center; vertical-align: middle; height: 2.5rem; word-wrap: break-word; }
+        
+        thead th { background-color: var(--bg-header); color: var(--text-header-inv); border-bottom: none; font-weight: bold; height: 2.8rem;}
+        thead th.sub-header { background-color: var(--bg-sub-header); font-weight: normal; font-size: 0.9rem; height: 2.2rem;}
+        tbody th { font-weight: bold; background-color: var(--bg-table-even); }
+        tbody tr { background-color: var(--bg-table-odd); }
+        tfoot { background-color: var(--bg-table-odd); font-weight: bold; }
+        
+        .input-cell { background-color: var(--bg-input); cursor: text; transition: all 0.2s; color: #0d6efd; font-weight: bold; }
+        .input-cell:focus { outline: none; background-color: var(--bg-input-focus) !important; box-shadow: inset var(--shadow-focus); }
+        .result-cell { background-color: var(--bg-result); color: var(--text-result); }
+        .diagonal-cell { background-color: var(--bg-diagonal); color: var(--text-tip); }
+        
+        .header-title { background-color: var(--bg-title-header); color: white; text-align: left; padding: 1rem 1.25rem; border-radius: 0.5rem; margin-bottom: 2rem; box-shadow: var(--shadow-base);}
+        .unit-cell { font-size: 0.9rem; color: var(--text-unit); }
+        .tip-text { font-size: 0.9rem; color: var(--text-tip); margin-top: -0.5rem; margin-bottom: 1rem; }
+        
+        .controls-group button { color: white; border: none; padding: 0.5rem 1rem; border-radius: 0.4rem; cursor: pointer; font-size: 0.9rem; margin-left: 0.6rem; transition: 0.2s; font-weight: bold; }
+        #resetAllBtn { background-color: var(--bg-btn-reset); }
+        #resetAllBtn:hover { background-color: var(--bg-btn-reset-hover); }
+        #randomizeOdBtn { background-color: var(--bg-btn-random); }
+        #randomizeOdBtn:hover { background-color: var(--bg-btn-random-hover); }
+
+        /* ======= 时段图表区域 (横向滑动 + 拟物滑块) ======= */
+        #ratioChartContainer { 
+            position: relative; padding: 2.5rem 0 1rem; border: 1px solid var(--border-color); 
+            border-radius: 0.5rem; background-color: var(--bg-chart); height: 16rem; 
+            box-shadow: var(--shadow-base); margin-bottom: 2.5rem; 
+            overflow-x: auto; overflow-y: hidden; -webkit-overflow-scrolling: touch;
+        }
+        #chartInnerWrapper { display: flex; justify-content: space-around; min-width: 65rem; height: 100%; position: relative; padding: 0 1rem; }
+
+        .bar-wrapper { display: flex; flex-direction: column; align-items: center; text-align: center; height: 100%; position: relative; flex: 1; z-index: 1; margin: 0 0.5rem; }
+        .bar-percentage { font-weight: bold; color: var(--text-body); margin-bottom: 0.5rem; font-size: 0.9rem; }
+        .bar-track { position: relative; width: 1rem; height: calc(100% - 3rem); background-color: var(--bg-bar-track); border-radius: 0.5rem; }
+        .bar-value { position: absolute; bottom: 0; width: 100%; background-color: var(--bg-bar-value); border-radius: 0.5rem; transition: background-color 0.2s; }
+        .bar-value.peak-bar { background-color: var(--bg-bar-peak); }
+        
+        /* 真实的拟物化滑块按钮 */
+        .bar-handle { 
+            position: absolute; top: -0.8rem; left: 50%; transform: translateX(-50%);
+            width: 1.8rem; height: 1.4rem; background-color: var(--bg-slider-thumb); 
+            border: 0.2rem solid var(--border-slider-thumb); cursor: ns-resize; border-radius: 0.5rem; 
+            z-index: 10; box-shadow: var(--shadow-thumb); touch-action: none; 
+        }
+        .peak-bar .bar-handle { border-color: var(--border-slider-peak); }
+        .bar-handle::after { content: ''; position: absolute; top: -10px; bottom: -10px; left: -10px; right: -10px;}
+        .bar-label { margin-top: 0.8rem; font-size: 0.85rem; color: var(--text-unit); white-space: nowrap; transform: rotate(-45deg); transform-origin: left top; }
+        
+        .threshold-line { position: absolute; left: 0; width: 100%; height: 2px; border-bottom: 2px dashed var(--bg-bar-peak); z-index: 2; cursor: ns-resize; pointer-events: none;}
+        .threshold-line-interactive-area { position: absolute; left: 0; width: 100%; height: 2rem; transform: translateY(-50%); z-index: 3; cursor: ns-resize; touch-action: none;}
+        .threshold-label { position: absolute; left: 1.5rem; background-color: var(--bg-bar-peak); color: white; padding: 0.25rem 0.6rem; border-radius: 0.25rem; font-size: 0.9rem; z-index: 3; pointer-events: none; transform: translateY(50%); font-weight: bold; box-shadow: var(--shadow-thumb);}
+
+        .max-flow-text { color: #d32f2f; font-size: 1.1rem; margin-left: 0.6rem; font-weight: bold; background: rgba(211,47,47,0.1); padding: 0.3rem 0.8rem; border-radius: 0.25rem;}
+        html.dark-mode .max-flow-text { color: #ff6b6b; background: rgba(255,107,107,0.15);}
+        .highlight-max { background-color: #ffe6e6 !important; color: #d32f2f !important; font-weight: bold; }
+        html.dark-mode .highlight-max { background-color: rgba(211, 47, 47, 0.3) !important; color: #ff6b6b !important; }
+
+        /* 右下角悬浮按钮 */
+        #theme-toggle { position: fixed; bottom: 2rem; right: 2rem; width: 3.5rem; height: 3.5rem; border-radius: 50%; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 1000; transition: all 0.2s ease; background-color: var(--bg-table-even); box-shadow: 0 0.25rem 1rem rgba(0,0,0,0.2); color: var(--text-body); }
+        #theme-toggle:hover { transform: scale(1.1); }
+        #theme-toggle .sun-icon { display: none; } #theme-toggle .moon-icon { display: block; }
+        html.dark-mode #theme-toggle .sun-icon { display: block; } html.dark-mode #theme-toggle .moon-icon { display: none; }
+
+        /* ======= 启动引导与弹窗 UI ======= */
+        .welcome-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.65); backdrop-filter: blur(5px); z-index: 2000; display: flex; justify-content: center; align-items: center; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; }
+        .welcome-overlay.active { opacity: 1; pointer-events: auto; }
+        .welcome-modal { background: var(--bg-table-odd); padding: 2.5rem 2rem; border-radius: 1rem; text-align: center; box-shadow: 0 15px 35px rgba(0,0,0,0.3); transform: translateY(30px); transition: transform 0.4s ease; width: 90%; max-width: 420px; color: var(--text-body);}
+        .welcome-overlay.active .welcome-modal { transform: translateY(0); }
+        .welcome-modal h3 { margin-top: 0; color: var(--text-header); font-size: 1.5rem; margin-bottom: 0.5rem;}
+        .welcome-modal p { margin-bottom: 1.5rem; color: var(--text-tip); }
+        .theme-options { display: flex; gap: 1rem; justify-content: center; }
+        .theme-btn { flex: 1; padding: 1.2rem 0; border: none; border-radius: 0.8rem; font-size: 1.1rem; font-weight: bold; cursor: pointer; transition: all 0.2s; display: flex; flex-direction: column; align-items: center; gap: 0.5rem;}
+        .theme-btn:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+        .light-btn { background: #f8f9fa; color: #212529; border: 2px solid #dee2e6; }
+        .dark-btn { background: #212529; color: #f8f9fa; border: 2px solid #495057; }
+
+        .guide-popover { position: fixed; bottom: 6.5rem; right: 2rem; background: var(--bg-title-header); color: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 6px 20px rgba(0,0,0,0.25); z-index: 1001; opacity: 0; pointer-events: none; transition: opacity 0.4s, transform 0.4s; transform: translateY(15px); width: max-content; max-width: 220px; text-align: center; line-height: 1.4;}
+        .guide-popover.active { opacity: 1; pointer-events: auto; transform: translateY(0); animation: float-bounce 2s ease-in-out infinite; }
+        @keyframes float-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+        .guide-popover::after { content: ''; position: absolute; bottom: -8px; right: 1rem; border-width: 8px 8px 0; border-style: solid; border-color: var(--bg-title-header) transparent transparent transparent; }
+        .btn-got-it { background: white; color: var(--bg-title-header); border: none; padding: 0.4rem 1rem; border-radius: 0.25rem; margin-top: 0.8rem; cursor: pointer; font-weight: bold; font-size: 0.9rem; width: 100%; transition: background 0.2s;}
+        .btn-got-it:hover { background: #f1f3f5; }
+
+        @media (max-width: 768px) {
+            body { padding: 0.8rem; }
+            h2 { flex-direction: column; align-items: flex-start; gap: 0.6rem;}
+            .controls-group { width: 100%; display: flex; justify-content: flex-end; }
+            #ratioChartContainer { height: 18rem; padding-top: 3rem; } 
+            .bar-label { transform: rotate(-60deg); font-size: 0.8rem; margin-top: 1.2rem;}
+        }
+    </style>
+</head>
+<body>
+
+<!-- 启动模式选择弹窗 -->
+<div id="welcomeOverlay" class="welcome-overlay">
+    <div class="welcome-modal">
+        <h3>欢迎使用编制系统 👋</h3>
+        <p>为保证最佳体验，请选择您偏好的视觉模式：</p>
+        <div class="theme-options">
+            <button id="btnLightMode" class="theme-btn light-btn"><span style="font-size:1.5rem">☀️</span> 明亮模式</button>
+            <button id="btnDarkMode" class="theme-btn dark-btn"><span style="font-size:1.5rem">🌙</span> 暗夜模式</button>
+        </div>
+    </div>
+</div>
+
+<div class="main-container">
+
+<h1 class="header-title">轨道交通全日制行车计划动态编制系统</h1>
+
+<!-- ============================================= -->
+<!-- SECTION 1: 原始数据输入 -->
+<!-- ============================================= -->
+<h2>
+    1. 早高峰A至H站之间的站间客流OD表
+    <div class="controls-group">
+        <button id="randomizeOdBtn">随机生成数值</button>
+        <button id="resetAllBtn">恢复原始数据</button>
+    </div>
+</h2>
+<p class="tip-text">说明：已完全匹配图纸原始数据。点击蓝色单元格可修改数据，系统将自动重算。</p>
+
+<div class="table-wrapper">
+    <table id="odTable">
+        <colgroup><col style="width: 12%;"><col style="width: 9.7%;"><col style="width: 9.7%;"><col style="width: 9.7%;"><col style="width: 9.7%;"><col style="width: 9.7%;"><col style="width: 9.7%;"><col style="width: 9.7%;"><col style="width: 9.7%;"><col style="width: 10.4%;"></colgroup>
+        <thead><tr><th>起点 \ 终点</th><th>A</th><th>B</th><th>C</th><th>D</th><th>E</th><th>F</th><th>G</th><th>H</th><th>总上车</th></tr></thead>
+        <tbody></tbody>
+        <tfoot><tr><th>总下车</th><td class="result-cell" id="colA"></td><td class="result-cell" id="colB"></td><td class="result-cell" id="colC"></td><td class="result-cell" id="colD"></td><td class="result-cell" id="colE"></td><td class="result-cell" id="colF"></td><td class="result-cell" id="colG"></td><td class="result-cell" id="colH"></td><td>-</td></tr></tfoot>
+    </table>
+</div>
+
+<!-- ============================================= -->
+<!-- SECTION 2: 断面客流与车站乘降计算 -->
+<!-- ============================================= -->
+<h2>
+    2. 早高峰站间断面客流与乘降分析表
+    <span class="max-flow-text">最大断面客流峰值: <span id="maxPeakFlowLabel">0</span></span>
+</h2>
+<div class="table-wrapper">
+    <table id="sectionFlowTable">
+        <colgroup><col style="width: 15%;"><col style="width: 12%;"><col style="width: 12%;"><col style="width: 22%;"><col style="width: 12%;"><col style="width: 12%;"><col style="width: 15%;"></colgroup>
+        <thead><tr><th colspan="3">上行方向</th><th rowspan="2">车站</th><th colspan="3">下行方向</th></tr><tr><th class="sub-header">断面客流</th><th class="sub-header">上车 (人)</th><th class="sub-header">下车 (人)</th><th class="sub-header">上车 (人)</th><th class="sub-header">下车 (人)</th><th class="sub-header">断面客流</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+<!-- ============================================= -->
+<!-- SECTION 3: 参数设置与客流时间分布 -->
+<!-- ============================================= -->
+<h2>3. 运营参数与全日客流分布比例</h2>
+<div class="table-wrapper">
+    <table id="paramsTable">
+        <colgroup><col style="width: 20%;"><col style="width: 15%;"><col style="width: 20%;"><col style="width: 45%;"></colgroup>
+        <thead><tr><th>列车参数</th><th class="unit-cell">单位</th><th>设定值</th><th>自动换算结果</th></tr></thead>
+        <tbody>
+            <tr><th>列车编组</th><td class="unit-cell">辆/列</td><td class="input-cell" id="param_cars" contenteditable="true">6</td><td class="result-cell" rowspan="2">单列车额定载客量: <span id="param_rated_cap" style="font-weight:bold; font-size:1.1rem;">0</span> 人/列</td></tr>
+            <tr><th>车辆定员</th><td class="unit-cell">人/辆</td><td class="input-cell" id="param_capacity" contenteditable="true">260</td></tr>
+            <tr><th>高峰满载率</th><td class="unit-cell">%</td><td class="input-cell" id="param_peak_rate" contenteditable="true">110</td><td class="result-cell">高峰单列实际运力: <span id="param_peak_cap" style="font-weight:bold; font-size:1.1rem; color:var(--bg-title-header);">0</span> 人/列</td></tr>
+            <tr><th>平峰满载率</th><td class="unit-cell">%</td><td class="input-cell" id="param_offpeak_rate" contenteditable="true">90</td><td class="result-cell">平峰单列实际运力: <span id="param_offpeak_cap" style="font-weight:bold; font-size:1.1rem; color:var(--bg-title-header);">0</span> 人/列</td></tr>
+            <tr><th>最小行车间隔</th><td class="unit-cell">分钟</td><td class="input-cell" id="param_min_interval" contenteditable="true">10</td><td class="result-cell" style="font-size: 0.9rem; color: var(--text-tip);">*系统将以此约束各时段最低开行对数</td></tr>
+        </tbody>
+    </table>
+</div>
+
+<p class="tip-text" style="text-align: center; margin-top: 1.25rem; font-weight: bold;">
+    👇 提示：按住图表空白处可【左右滑动】查看所有时段；按住圆角滑块可【上下拖动】调整比例。
+</p>
+<div id="ratioChartContainer">
+    <div id="chartInnerWrapper"></div>
+    <div class="threshold-line-interactive-area" id="thresholdArea"></div>
+    <div id="thresholdLinePeak" class="threshold-line"></div>
+    <div id="thresholdLabelPeak" class="threshold-label">高峰界限: 80%</div>
+</div>
+
+
+<!-- ============================================= -->
+<!-- SECTION 4: 全日制行车计划 -->
+<!-- ============================================= -->
+<h2>4. 全日制行车计划</h2>
+<div class="table-wrapper">
+    <table id="scheduleTable">
+        <colgroup><col style="width: 14%;"><col style="width: 10%;"><col style="width: 15%;"><col style="width: 10%;"><col style="width: 11%;"><col style="width: 11%;"><col style="width: 13%;"><col style="width: 16%;"></colgroup>
+        <thead><tr><th>运营时段</th><th>客流比例</th><th>断面客流(人次/h)</th><th>时段类型</th><th>单列运力</th><th>理论对数</th><th>最终开行对数</th><th>行车间隔</th></tr></thead>
+        <tbody></tbody>
+    </table>
+</div>
+
+</div> <!-- End main container -->
+
+<!-- 新手引导气泡 -->
+<div id="guidePopover" class="guide-popover">
+    <div>💡 提示：随时可以在这里切换明亮/暗夜模式哦！👇</div>
+    <button id="btnGotIt" class="btn-got-it">我知道了</button>
+</div>
+
+<!-- 右下角主题切换悬浮按钮 -->
+<button id="theme-toggle" title="切换模式">
+    <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+    <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+</button>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const STATIONS = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    const NUM_STATIONS = STATIONS.length;
+    const TIME_SLOTS = ["05:00-06:00", "06:00-07:00", "07:00-08:00", "08:00-09:00", "09:00-10:00","10:00-11:00", "11:00-12:00", "12:00-13:00", "13:00-14:00", "14:00-15:00","15:00-16:00", "16:00-17:00", "17:00-18:00", "18:00-19:00", "19:00-20:00","20:00-21:00", "21:00-22:00", "22:00-23:00"];
+    
+    // ✨ 精确替换的新OD客流表数据 ✨
+    const DEFAULT_OD = [
+        [0, 2341, 2033, 2518, 1626, 2104, 3245, 4232],
+        [2314, 0, 575, 1540, 1320, 2282, 2603, 3112],
+        [1887, 524, 0, 187, 281, 761, 959, 1587],
+        [2575, 1376, 199, 0, 153, 665, 940, 1638],
+        [1556, 1253, 322, 158, 0, 143, 426, 1040],
+        [3100, 2337, 662, 691, 162, 0, 280, 1895],
+        [3201, 3109, 816, 956, 448, 388, 0, 711],
+        [3560, 2918, 1569, 1728, 967, 1752, 671, 0]
+    ];
+    
+    // ✨ 精确替换的新客流比例数据 ✨
+    const DEFAULT_RATIOS = [18, 42, 100, 74, 49, 52, 64, 59, 55, 57, 68, 86, 63, 44, 33, 28, 25, 16];
+    
+    let odData = [], timeRatios = [], peakThreshold = 80, draggingState = { isDragging: false, type: null, element: null };
+
+    const fmt = (num) => isNaN(num) ? "0" : Number(num).toLocaleString('en-US');
+
+    function init() {
+        checkAppInitialization(); // ✨ 启动引导检查
+        resetData();
+        renderODTable();
+        renderChart();
+        setupEventListeners();
+        calculateAll();
+        setupThemeSwitcher();
+    }
+
+    // ==========================================
+    // ✨ 首次启动拦截与新手引导逻辑 ✨
+    // ==========================================
+    function checkAppInitialization() {
+        const isInit = localStorage.getItem('app_init_v2');
+        const overlay = document.getElementById('welcomeOverlay');
+        const html = document.documentElement;
+
+        if (!isInit) {
+            // 第一次访问：弹窗并拦截
+            overlay.classList.add('active');
+            
+            document.getElementById('btnLightMode').addEventListener('click', () => {
+                html.classList.remove('dark-mode');
+                localStorage.setItem('theme', 'light');
+                finishInit();
+            });
+            
+            document.getElementById('btnDarkMode').addEventListener('click', () => {
+                html.classList.add('dark-mode');
+                localStorage.setItem('theme', 'dark');
+                finishInit();
+            });
+        } else {
+            // 非第一次访问：直接应用主题
+            const savedTheme = localStorage.getItem('theme');
+            if (savedTheme === 'dark') html.classList.add('dark-mode');
+        }
+    }
+
+    function finishInit() {
+        document.getElementById('welcomeOverlay').classList.remove('active');
+        localStorage.setItem('app_init_v2', 'true');
+        
+        // 延迟半秒弹出气泡，引导视觉
+        setTimeout(() => {
+            document.getElementById('guidePopover').classList.add('active');
+        }, 500);
+    }
+
+    // 关闭气泡引导
+    document.getElementById('btnGotIt').addEventListener('click', () => {
+        document.getElementById('guidePopover').classList.remove('active');
+    });
+    // ==========================================
+
+
+    function resetData() {
+        odData = JSON.parse(JSON.stringify(DEFAULT_OD));
+        timeRatios = [...DEFAULT_RATIOS];
+        peakThreshold = 80;
+        document.getElementById('param_cars').textContent = '6';
+        document.getElementById('param_capacity').textContent = '260';
+        document.getElementById('param_peak_rate').textContent = '110';
+        document.getElementById('param_offpeak_rate').textContent = '90';
+        document.getElementById('param_min_interval').textContent = '10';
+    }
+
+    function randomizeOD() {
+        odData = DEFAULT_OD.map(row => row.map(val => (val === 0) ? 0 : Math.round(val * (0.7 + Math.random() * 0.6))));
+        renderODTable();
+        calculateAll();
+    }
+
+    function renderODTable() {
+        const tbody = document.querySelector('#odTable tbody');
+        tbody.innerHTML = '';
+        STATIONS.forEach((station, i) => {
+            const tr = document.createElement('tr');
+            let html = `<th>${station}</th>`;
+            STATIONS.forEach((_, j) => {
+                html += (i === j) ? `<td class="diagonal-cell">—</td>` : `<td class="input-cell od-input" data-r="${i}" data-c="${j}" contenteditable="true">${odData[i][j]}</td>`;
+            });
+            html += `<td class="result-cell" id="sum${station}" style="font-weight:bold;">0</td>`;
+            tr.innerHTML = html;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderChart() {
+        const container = document.getElementById('chartInnerWrapper');
+        container.innerHTML = '';
+        const isMobile = window.innerWidth <= 768;
+        TIME_SLOTS.forEach((slot, index) => {
+            const pct = timeRatios[index];
+            const labelHtml = isMobile ? slot.replace(/:00/g, '') : slot.replace('-', '<br>-');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bar-wrapper';
+            wrapper.innerHTML = `
+                <div class="bar-percentage">${pct}%</div>
+                <div class="bar-track">
+                    <div class="bar-value" style="height: ${pct}%">
+                        <div class="bar-handle" data-idx="${index}"></div>
+                    </div>
+                </div>
+                <div class="bar-label">${labelHtml}</div>`;
+            container.appendChild(wrapper);
+            
+            const handle = wrapper.querySelector('.bar-handle');
+            const startDragBar = (e) => {
+                e.preventDefault(); 
+                draggingState = { isDragging: true, type: 'bar', index: index, element: wrapper.querySelector('.bar-track') };
+            };
+            handle.addEventListener('mousedown', startDragBar);
+            handle.addEventListener('touchstart', startDragBar, { passive: false });
+        });
+        updateChartVisuals();
+    }
+
+    function updateChartVisuals() {
+        const innerRect = document.getElementById('chartInnerWrapper').getBoundingClientRect();
+        const peakPosition = (peakThreshold / 100) * (innerRect.height - 40); 
+        const peakLine = document.getElementById('thresholdLinePeak');
+        const peakLabel = document.getElementById('thresholdLabelPeak');
+        const thresholdArea = document.getElementById('thresholdArea');
+
+        peakLine.style.bottom = `calc(${peakThreshold}% - 1.5rem)`;
+        peakLabel.style.bottom = `calc(${peakThreshold}% - 1.5rem)`;
+        thresholdArea.style.bottom = `calc(${peakThreshold}% - 1.5rem)`;
+        peakLabel.textContent = `高峰界限: ${peakThreshold}%`;
+
+        document.querySelectorAll('.bar-wrapper').forEach((wrapper, idx) => {
+            const pct = timeRatios[idx];
+            wrapper.querySelector('.bar-value').style.height = `${pct}%`;
+            wrapper.querySelector('.bar-percentage').textContent = `${pct}%`;
+            wrapper.querySelector('.bar-value').classList.toggle('peak-bar', pct >= peakThreshold);
+        });
+    }
+
+    function calculateAll() {
+        document.querySelectorAll('.od-input').forEach(cell => {
+            let val = parseInt(cell.textContent.replace(/,/g, '')) || 0;
+            odData[parseInt(cell.dataset.r)][parseInt(cell.dataset.c)] = val;
+            cell.textContent = val;
+        });
+
+        let rowSums = new Array(NUM_STATIONS).fill(0), colSums = new Array(NUM_STATIONS).fill(0);
+        for(let i=0; i<NUM_STATIONS; i++){ 
+            for(let j=0; j<NUM_STATIONS; j++){ rowSums[i] += odData[i][j]; colSums[j] += odData[i][j]; }
+            document.getElementById(`sum${STATIONS[i]}`).textContent = fmt(rowSums[i]);
+            document.getElementById(`col${STATIONS[i]}`).textContent = fmt(colSums[i]);
+        }
+
+        let upOn = new Array(NUM_STATIONS).fill(0), upOff = new Array(NUM_STATIONS).fill(0), downOn = new Array(NUM_STATIONS).fill(0), downOff = new Array(NUM_STATIONS).fill(0);
+        for (let i = 0; i < NUM_STATIONS; i++) { for (let j = 0; j < NUM_STATIONS; j++) { let pax = odData[i][j]; if (i < j) { upOn[i] += pax; upOff[j] += pax; } else if (i > j) { downOn[i] += pax; downOff[j] += pax; } } }
+
+        let upFlow = new Array(NUM_STATIONS - 1).fill(0), downFlow = new Array(NUM_STATIONS - 1).fill(0);
+        upFlow[0] = upOn[0] - upOff[0];
+        for(let i = 1; i < NUM_STATIONS - 1; i++) upFlow[i] = upFlow[i-1] + upOn[i] - upOff[i];
+        downFlow[NUM_STATIONS - 2] = downOn[NUM_STATIONS - 1] - downOff[NUM_STATIONS - 1];
+        for(let i = NUM_STATIONS - 3; i >= 0; i--) downFlow[i] = downFlow[i+1] + downOn[i+1] - downOff[i+1];
+        let maxFlowVal = Math.max(...upFlow, ...downFlow);
+        document.getElementById('maxPeakFlowLabel').textContent = fmt(maxFlowVal);
+
+        const flowBody = document.querySelector('#sectionFlowTable tbody');
+        flowBody.innerHTML = '';
+        const totalRows = 2 * NUM_STATIONS - 2;
+        for (let r = 0; r < totalRows; r++) {
+            const tr = document.createElement('tr');
+            if (r % 2 === 0) { let k = r / 2; let isMax = upFlow[k] === maxFlowVal ? 'highlight-max' : ''; tr.innerHTML += `<td rowspan="2" class="result-cell ${isMax}">${fmt(upFlow[k])}</td>`; }
+            if (r === 0) { tr.innerHTML += `<td class="result-cell">${fmt(upOn[0])}</td><td class="result-cell">${fmt(upOff[0])}</td><th>${STATIONS[0]}</th><td class="result-cell">${fmt(downOn[0])}</td><td class="result-cell">${fmt(downOff[0])}</td>`;
+            } else if (r % 2 === 1) { let i = (r + 1) / 2; let span = (i === NUM_STATIONS - 1) ? 1 : 2; tr.innerHTML += `<td class="result-cell" rowspan="${span}">${fmt(upOn[i])}</td><td class="result-cell" rowspan="${span}">${fmt(upOff[i])}</td><th rowspan="${span}" style="font-size:1.1rem;">${STATIONS[i]}</th><td class="result-cell" rowspan="${span}">${fmt(downOn[i])}</td><td class="result-cell" rowspan="${span}">${fmt(downOff[i])}</td>`; }
+            if (r % 2 === 0) { let k = r / 2; let isMax = downFlow[k] === maxFlowVal ? 'highlight-max' : ''; tr.innerHTML += `<td rowspan="2" class="result-cell ${isMax}">${fmt(downFlow[k])}</td>`; }
+            flowBody.appendChild(tr);
+        }
+
+        const cars = parseFloat(document.getElementById('param_cars').textContent) || 0;
+        const capacity = parseFloat(document.getElementById('param_capacity').textContent) || 0;
+        const peakRate = (parseFloat(document.getElementById('param_peak_rate').textContent) || 0) / 100;
+        const offpeakRate = (parseFloat(document.getElementById('param_offpeak_rate').textContent) || 0) / 100;
+        const minInterval = parseFloat(document.getElementById('param_min_interval').textContent) || 0;
+
+        const ratedCap = cars * capacity; const peakCap = ratedCap * peakRate; const offpeakCap = ratedCap * offpeakRate;
+        document.getElementById('param_rated_cap').textContent = fmt(Math.round(ratedCap));
+        document.getElementById('param_peak_cap').textContent = fmt(Math.round(peakCap));
+        document.getElementById('param_offpeak_cap').textContent = fmt(Math.round(offpeakCap));
+
+        const scheduleBody = document.querySelector('#scheduleTable tbody');
+        scheduleBody.innerHTML = '';
+        TIME_SLOTS.forEach((time, index) => {
+            const pct = timeRatios[index]; 
+            const isPeak = pct >= peakThreshold; 
+            const unitCap = isPeak ? peakCap : offpeakCap; 
+            const hourlyFlow = Math.round(maxFlowVal * (pct / 100)); 
+            
+            const theoretical = unitCap > 0 ? hourlyFlow / unitCap : 0; 
+            let finalTrains = Math.ceil(theoretical); 
+            
+            if (minInterval > 0) {
+                const minTrainsReq = Math.ceil(60 / minInterval);
+                if (finalTrains < minTrainsReq) { finalTrains = minTrainsReq; }
+            }
+
+            const interval = finalTrains > 0 ? 60 / finalTrains : Infinity;
+            
+            const tr = document.createElement('tr'); 
+            if (isPeak) tr.style.backgroundColor = 'var(--bg-diagonal)';
+            tr.innerHTML = `<td>${time}</td><td>${pct}%</td><td class="result-cell" style="font-weight:bold;">${fmt(hourlyFlow)}</td><td style="color: ${isPeak ? 'var(--bg-bar-peak)' : 'inherit'}; font-weight: ${isPeak ? 'bold' : 'normal'};">${isPeak ? '高峰' : '平峰'}</td><td>${fmt(Math.round(unitCap))}</td><td>${theoretical.toFixed(2)}</td><td style="font-weight: bold; font-size: 1.1rem; color: var(--bg-title-header);">${finalTrains}</td><td>${formatTime(interval)}</td>`;
+            scheduleBody.appendChild(tr);
+        });
+    }
+
+    function formatTime(minutes) { if (minutes === Infinity || isNaN(minutes) || minutes <= 0) return "—"; const min = Math.floor(minutes); const sec = Math.round((minutes - min) * 60); return `${min}分 ${sec < 10 ? '0' : ''}${sec}秒`; }
+
+    function setupEventListeners() {
+        document.getElementById('odTable').addEventListener('blur', calculateAll, true);
+        document.getElementById('paramsTable').addEventListener('blur', calculateAll, true);
+        document.getElementById('resetAllBtn').addEventListener('click', () => { resetData(); renderODTable(); renderChart(); calculateAll(); });
+        document.getElementById('randomizeOdBtn').addEventListener('click', randomizeOD);
+
+        const thresholdArea = document.getElementById('thresholdArea');
+        const startDragLine = (e) => { e.preventDefault(); draggingState = { isDragging: true, type: 'threshold' }; };
+        thresholdArea.addEventListener('mousedown', startDragLine);
+        thresholdArea.addEventListener('touchstart', startDragLine, { passive: false });
+
+        const doDragMove = (e) => {
+            if (!draggingState.isDragging) return;
+            e.preventDefault(); 
+            
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            
+            if (draggingState.type === 'bar' && draggingState.element) { 
+                const rect = draggingState.element.getBoundingClientRect();
+                let rawPct = Math.max(0, Math.min(100, Math.round(((rect.bottom - clientY) / rect.height) * 100)));
+                timeRatios[draggingState.index] = rawPct; 
+            } 
+            else if (draggingState.type === 'threshold') { 
+                const chartRect = document.getElementById('chartInnerWrapper').getBoundingClientRect();
+                const effectiveHeight = chartRect.height - 40; 
+                let rawPct = Math.max(0, Math.min(100, Math.round(((chartRect.bottom - 40 - clientY) / effectiveHeight) * 100)));
+                peakThreshold = Math.round(rawPct / 5) * 5; 
+            }
+            updateChartVisuals();
+            calculateAll();
+        };
+
+        const stopDrag = () => { draggingState.isDragging = false; draggingState.element = null;};
+        document.addEventListener('mousemove', doDragMove, { passive: false });
+        document.addEventListener('touchmove', doDragMove, { passive: false });
+        document.addEventListener('mouseup', stopDrag);
+        document.addEventListener('touchend', stopDrag);
+        window.addEventListener('resize', renderChart);
+    }
+
+    function setupThemeSwitcher() {
+        const toggle = document.getElementById('theme-toggle');
+        const html = document.documentElement;
+        
+        toggle.addEventListener('click', () => {
+            const isDark = html.classList.toggle('dark-mode');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            
+            // 点击切换时，如果有新手引导气泡，顺便让它消失
+            document.getElementById('guidePopover').classList.remove('active');
+        });
+    }
+
+    init();
+});
+</script>
+</body>
+</html>
